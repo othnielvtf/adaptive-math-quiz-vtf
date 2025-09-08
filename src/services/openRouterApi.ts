@@ -4,12 +4,17 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export class OpenRouterService {
   private async makeRequest(prompt: string, config: ApiConfig): Promise<string> {
-    if (config.provider === 'openrouter') {
-      return this.makeOpenRouterRequest(prompt, config);
-    } else if (config.provider === 'ollama') {
-      return this.makeOllamaRequest(prompt, config);
-    } else {
-      throw new Error('Invalid provider configuration');
+    try {
+      if (config.provider === 'openrouter') {
+        return await this.makeOpenRouterRequest(prompt, config);
+      } else if (config.provider === 'ollama') {
+        return await this.makeOllamaRequest(prompt, config);
+      } else {
+        throw new Error('Invalid provider configuration');
+      }
+    } catch (error) {
+      console.error('API request failed:', error);
+      throw error; // Re-throw to be handled by the caller
     }
   }
 
@@ -18,70 +23,88 @@ export class OpenRouterService {
       throw new Error('OpenRouter API key not configured');
     }
 
-    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a math teacher creating quiz questions. Always respond with valid JSON format only, no additional text.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-      }),
-    });
+    try {
+      const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a math teacher creating quiz questions. Always respond with valid JSON format only, no additional text.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No error details available');
+        throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}. Details: ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Invalid response format from OpenRouter API');
+      }
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('OpenRouter request failed:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
   }
 
   private async makeOllamaRequest(prompt: string, config: ApiConfig): Promise<string> {
     const ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
     
-    const response = await fetch(`${ollamaUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a math teacher creating quiz questions. Always respond with valid JSON format only, no additional text.'
-          },
-          {
-            role: 'user',
-            content: prompt
+    try {
+      const response = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a math teacher creating quiz questions. Always respond with valid JSON format only, no additional text.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          stream: false,
+          options: {
+            temperature: 0.7,
           }
-        ],
-        stream: false,
-        options: {
-          temperature: 0.7,
-        }
-      }),
-    });
+        }),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No error details available');
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}. Details: ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.message || !data.message.content) {
+        throw new Error('Invalid response format from Ollama API');
+      }
+      return data.message.content;
+    } catch (error) {
+      console.error('Ollama request failed:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.message.content;
   }
 
   async generateAssessmentQuestions(config: ApiConfig): Promise<any[]> {

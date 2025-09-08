@@ -29,6 +29,12 @@ export const useQuiz = (apiConfig: ApiConfig) => {
     
     try {
       const questions = await openRouterService.generateAssessmentQuestions(apiConfig);
+      
+      // Validate questions data
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('Invalid or empty questions data received');
+      }
+      
       const formattedQuestions: Question[] = questions.map((q, index) => ({
         id: `assessment-${index}`,
         question: q.question,
@@ -47,11 +53,12 @@ export const useQuiz = (apiConfig: ApiConfig) => {
         startTime: Date.now()
       }));
     } catch (err) {
-      setError('Failed to load assessment questions. Please try again.');
+      console.error('Assessment error:', err);
+      setError(`Failed to load assessment questions. ${err instanceof Error ? err.message : 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiConfig]);
 
   const submitAnswer = useCallback((answer: string) => {
     setState(prev => {
@@ -102,6 +109,12 @@ export const useQuiz = (apiConfig: ApiConfig) => {
                     ['calculus', 'trigonometry', 'advanced_algebra'];
 
       const questions = await openRouterService.generateTailoredQuiz(state.level, topics, apiConfig);
+      
+      // Validate questions data
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('Invalid or empty questions data received');
+      }
+      
       const formattedQuestions: Question[] = questions.map((q, index) => ({
         id: `quiz-${index}`,
         question: q.question,
@@ -119,11 +132,12 @@ export const useQuiz = (apiConfig: ApiConfig) => {
         currentQuestion: 0
       }));
     } catch (err) {
-      setError('Failed to load quiz questions. Please try again.');
+      console.error('Tailored quiz error:', err);
+      setError(`Failed to load quiz questions. ${err instanceof Error ? err.message : 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
-  }, [state.level]);
+  }, [state.level, apiConfig]);
 
   const finishQuiz = useCallback(() => {
     setState(prev => ({
